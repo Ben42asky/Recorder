@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech Notes</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ Speech Notes</h1>
+
+        <div class="status" id="status">
+            Ready to record your voice note
+        </div>
+
+        <textarea id="note" placeholder="Your note here..."></textarea>
+        <br/>
+        
+        <div class="controls">
+            <button id="start">🎤 Start Recording</button>
+            <button id="stop" disabled>🛑 Stop Recording</button>
+            <button id="save">💾 Save Note</button>
+        </div>
+
+        <h2>Saved Notes</h2>
+        <ul id="notes-list">
+           {% for note in notes %}
+                <li class="note-item">
+                    <div class="note-content">
+                        <div class="note-text">{{ note.text if note.text else note }}</div>
+                        <div class="note-timestamp">
+                            {% if note.timestamp %}{{ note.timestamp }}{% endif %}
+                        </div>
+                    </div>
+                    {% if note.audio %}
+                    <div class="note-audio">
+                        <audio controls>
+                            <source src="{{ note.audio }}" type="audio/webm">
+                            Your browser does not support the audio element.
+                        </audio>
+                    </div>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <script src="/static/js/script.js"></script>
+</body>
+</html>
