@@ -23,16 +23,6 @@ let analyser = null;
 let animationId = null;
 let mediaStream = null;
 
-// Achievement configuration
-const ACHIEVEMENTS = {
-    "first_note": { icon: "🎬", name: "Getting Started", desc: "Record your first note", color: "#3b82f6" },
-    "note_collector": { icon: "📚", name: "Note Collector", desc: "Save 10 notes", color: "#8b5cf6" },
-    "word_master": { icon: "📖", name: "Word Master", desc: "Record 1000 words", color: "#ec4899" },
-    "streak_3": { icon: "🔥", name: "On Fire", desc: "3-day recording streak", color: "#f59e0b" },
-    "verbose": { icon: "📝", name: "Verbose", desc: "500+ character note", color: "#06b6d4" },
-    "productive": { icon: "⚡", name: "Productive Day", desc: "5 notes in one day", color: "#10b981" },
-};
-
 // Timer functions
 function startTimer() {
     recordingStartTime = Date.now();
@@ -352,88 +342,7 @@ function stopRecording() {
     }
 }
 
-// Update stats display
-function updateStatsDisplay(stats) {
-    const totalNotesEl = document.getElementById("total-notes");
-    const totalWordsEl = document.getElementById("total-words");
-    const dailyStreakEl = document.getElementById("daily-streak");
-    const totalTimeEl = document.getElementById("total-time");
-    const levelBadgeEl = document.getElementById("level-badge");
-    const pointsDisplayEl = document.getElementById("points-display");
-    const progressBarEl = document.getElementById("progress-fill");
-    const progressTextEl = document.getElementById("progress-text");
 
-    if (totalNotesEl) totalNotesEl.textContent = stats.total_notes;
-    if (totalWordsEl) totalWordsEl.textContent = stats.total_words;
-    if (dailyStreakEl) dailyStreakEl.textContent = stats.daily_streak;
-    if (totalTimeEl) totalTimeEl.textContent = formatTime(stats.total_recording_time);
-    if (levelBadgeEl) levelBadgeEl.textContent = `Level ${stats.level}`;
-    if (pointsDisplayEl) pointsDisplayEl.textContent = `${stats.points} pts`;
-
-    // Update progress bar
-    const levelPoints = (stats.level - 1) * 100;
-    const nextLevelPoints = stats.level * 100;
-    const progress = ((stats.points - levelPoints) / 100) * 100;
-    if (progressBarEl) progressBarEl.style.width = Math.min(progress, 100) + "%";
-    if (progressTextEl) progressTextEl.textContent = `${stats.points % 100} / 100 pts`;
-}
-
-function formatTime(seconds) {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    if (minutes > 0) return `${minutes}m`;
-    return `${seconds}s`;
-}
-
-// Achievement notification
-function showAchievementNotification(achievement) {
-    const popup = document.getElementById("achievement-popup");
-    const nameEl = document.getElementById("achievement-name");
-    const pointsEl = document.getElementById("achievement-points");
-
-    if (popup && nameEl && pointsEl) {
-        nameEl.textContent = achievement.name;
-        pointsEl.textContent = `+${achievement.points} points`;
-        
-        popup.classList.add("show");
-        
-        setTimeout(() => {
-            popup.classList.remove("show");
-        }, 3000);
-    }
-}
-
-// Update achievements display
-function updateAchievementsDisplay(allAchievements, unlockedIds) {
-    const achievementsList = document.getElementById("achievements-list");
-    const achievementCount = document.getElementById("achievement-count");
-
-    if (!achievementsList) return;
-
-    achievementsList.innerHTML = "";
-    
-    Object.entries(ACHIEVEMENTS).forEach(([id, ach]) => {
-        const isUnlocked = unlockedIds.includes(id);
-        const badge = document.createElement("div");
-        badge.className = `achievement-badge ${isUnlocked ? "unlocked" : "locked"}`;
-        
-        badge.innerHTML = `
-            <div class="achievement-icon-small">${ach.icon}</div>
-            <div class="achievement-info">
-                <span class="achievement-title">${ach.name}</span>
-                <span class="achievement-desc">${ach.desc}</span>
-            </div>
-            ${isUnlocked ? '<div class="achievement-status">✓ Unlocked</div>' : ''}
-        `;
-        
-        achievementsList.appendChild(badge);
-    });
-
-    if (achievementCount) {
-        achievementCount.textContent = `${unlockedIds.length}/${Object.keys(ACHIEVEMENTS).length}`;
-    }
-}
 
 // Auto-save function (called while recording)
 function autoSaveNote(noteText) {
@@ -544,17 +453,7 @@ function sendNoteToServer(noteData) {
     .then(data => {
         if (data.status === "success") {
             if (noteData.is_final) {
-                updateStatus(`✅ Note saved! +${data.points_earned} points`, "success");
-                
-                // Update stats
-                updateStatsDisplay(data.stats);
-                
-                // Show achievement notifications
-                if (data.unlocked_achievements && data.unlocked_achievements.length > 0) {
-                    data.unlocked_achievements.forEach(ach => {
-                        setTimeout(() => showAchievementNotification(ach), 500);
-                    });
-                }
+                updateStatus("✅ Note saved successfully", "success");
                 
                 // Clear the note and state
                 noteInput.value = "";
@@ -575,7 +474,6 @@ function sendNoteToServer(noteData) {
                     showNoteStatus("Auto-saved draft");
                     showDiscardButton(true);
                 }
-                updateStatsDisplay(data.stats);
             }
         } else {
             throw new Error(data.message || "Save failed");
@@ -726,16 +624,6 @@ document.addEventListener("keydown", function(event) {
 
 // Initialize the app
 window.addEventListener('load', function() {
-    // Load initial stats
-    fetch("/stats")
-        .then(res => res.json())
-        .then(stats => updateStatsDisplay(stats));
-    
-    // Load achievements
-    fetch("/achievements")
-        .then(res => res.json())
-        .then(data => updateAchievementsDisplay(data.all, data.unlocked));
-    
     if (!initSpeechRecognition()) {
         updateStatus("❌ Speech recognition not available", "error");
     }
