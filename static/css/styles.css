@@ -203,6 +203,28 @@ body {
     50% { opacity: 0.6; }
 }
 
+.note-status {
+    font-size: 12px;
+    color: var(--neutral-700);
+    padding: 8px 12px;
+    background: var(--neutral-50);
+    border-radius: 6px;
+    margin-bottom: 12px;
+    display: none;
+    align-items: center;
+    gap: 6px;
+}
+
+.note-status.show {
+    display: flex;
+}
+
+.note-status::before {
+    content: "✓";
+    color: var(--success);
+    font-weight: bold;
+}
+
 .recording-controls {
     display: flex;
     flex-direction: column;

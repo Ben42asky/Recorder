@@ -127,5 +127,177 @@ def get_achievements():
         "unlocked": user_stats["achievements"]
     })
 
+@app.route("/auto_save_note", methods=["POST"])
+def auto_save_note():
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({"status": "error", "message": "No data provided"})
+    
+    note_text = data.get("note")
+    note_id = data.get("note_id")
+    audio_data = data.get("audio")
+    recording_time = data.get("recording_time", 0)
+    is_final = data.get("is_final", False)
+    
+    if not note_text or not note_text.strip():
+        return jsonify({"status": "error", "message": "No note provided"})
+    
+    note_text = note_text.strip()
+    
+    # Check if note already exists (update) or create new (create)
+    existing_note = None
+    if note_id:
+        existing_note = next((n for n in notes if n.get("id") == note_id), None)
+    
+    if existing_note:
+        # Update existing note
+        old_word_count = len(existing_note.get("text", "").split())
+        old_char_count = len(existing_note.get("text", ""))
+        
+        existing_note["text"] = note_text
+        existing_note["word_count"] = len(note_text.split())
+        existing_note["character_count"] = len(note_text)
+        if audio_data:
+            existing_note["audio"] = audio_data
+        
+        # Update stats with difference
+        new_word_count = len(note_text.split())
+        new_char_count = len(note_text)
+        user_stats["total_words"] += (new_word_count - old_word_count)
+        user_stats["total_characters"] += (new_char_count - old_char_count)
+        
+        points_earned = 0
+        unlocked_achievements = []
+        
+        if is_final:
+            # Only update stats and check achievements on final save
+            points_earned = (new_word_count - old_word_count) // 5 + 5
+            user_stats["points"] += points_earned
+            user_stats["level"] = calculate_level(user_stats["points"])
+            user_stats["total_recording_time"] += recording_time
+            unlocked_achievements = check_achievements()
+        
+        return jsonify({
+            "status": "success",
+            "message": "Note updated",
+            "note_id": existing_note["id"],
+            "note": existing_note,
+            "stats": user_stats,
+            "points_earned": points_earned,
+            "unlocked_achievements": unlocked_achievements
+        })
+    else:
+        # Create new note (auto-save on first transcription)
+        note = {
+            "id": str(uuid.uuid4()),
+            "text": note_text,
+            "audio": audio_data,
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "word_count": len(note_text.split()),
+            "character_count": len(note_text),
+            "is_draft": not is_final
+        }
+        
+        if is_final:
+            # This is the final save - apply full stats
+            user_stats["total_notes"] += 1
+            user_stats["total_words"] += len(note_text.split())
+            user_stats["total_characters"] += len(note_text)
+            user_stats["total_recording_time"] += recording_time
+            
+            # Update streak
+            today = datetime.datetime.now().strftime("%Y-%m-%d")
+            if user_stats["last_note_date"] == today:
+                pass
+            elif user_stats["last_note_date"] is None:
+                user_stats["daily_streak"] = 1
+            else:
+                last_date = datetime.datetime.strptime(user_stats["last_note_date"], "%Y-%m-%d")
+                current_date = datetime.datetime.now()
+                if (current_date - last_date).days == 1:
+                    user_stats["daily_streak"] += 1
+                else:
+                    user_stats["daily_streak"] = 1
+            
+            user_stats["last_note_date"] = today
+            
+            # Award points
+            points_earned = len(note_text.split()) // 5 + 10
+            user_stats["points"] += points_earned
+            user_stats["level"] = calculate_level(user_stats["points"])
+            
+            note["is_draft"] = False
+            unlocked_achievements = check_achievements()
+        else:
+            points_earned = 0
+            unlocked_achievements = []
+        
+        notes.append(note)
+        
+        return jsonify({
+            "status": "success",
+            "message": "Note created" if is_final else "Note auto-saved",
+            "note_id": note["id"],
+            "note": note,
+            "stats": user_stats,
+            "points_earned": points_earned,
+            "unlocked_achievements": unlocked_achievements
+        })
+
+@app.route("/update_note", methods=["POST"])
+def update_note():
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({"status": "error", "message": "No data provided"})
+    
+    note_id = data.get("note_id")
+    note_text = data.get("note", "").strip()
+    
+    if not note_id:
+        return jsonify({"status": "error", "message": "Note ID required"})
+    
+    existing_note = next((n for n in notes if n.get("id") == note_id), None)
+    
+    if not existing_note:
+        return jsonify({"status": "error", "message": "Note not found"})
+    
+    if not note_text:
+        return jsonify({"status": "error", "message": "Note text cannot be empty"})
+    
+    # Update the note
+    old_word_count = len(existing_note.get("text", "").split())
+    old_char_count = len(existing_note.get("text", ""))
+    
+    existing_note["text"] = note_text
+    existing_note["word_count"] = len(note_text.split())
+    existing_note["character_count"] = len(note_text)
+    existing_note["timestamp"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Update stats with difference
+    new_word_count = len(note_text.split())
+    new_char_count = len(note_text)
+    user_stats["total_words"] += (new_word_count - old_word_count)
+    user_stats["total_characters"] += (new_char_count - old_char_count)
+    
+    # Recalculate points for the difference
+    old_points = (old_word_count // 5) if old_word_count > 0 else 0
+    new_points = (new_word_count // 5) if new_word_count > 0 else 0
+    points_earned = max(0, new_points - old_points)
+    user_stats["points"] += points_earned
+    user_stats["level"] = calculate_level(user_stats["points"])
+    
+    unlocked_achievements = check_achievements()
+    
+    return jsonify({
+        "status": "success",
+        "message": "Note updated",
+        "note": existing_note,
+        "stats": user_stats,
+        "points_earned": points_earned,
+        "unlocked_achievements": unlocked_achievements
+    })
+
 if __name__ == "__main__":
     app.run(debug=True)

@@ -12,6 +12,8 @@ let audioChunks = [];
 let recordedAudioBlob = null;
 let recordingStartTime = 0;
 let recordingTimer = null;
+let currentNoteId = null;
+let autoSaveTimeout = null;
 
 // Achievement configuration
 const ACHIEVEMENTS = {
@@ -83,6 +85,14 @@ function initSpeechRecognition() {
             transcript += event.results[i][0].transcript;
         }
         noteInput.value = transcript;
+        
+        // Auto-save the transcription
+        if (transcript.trim()) {
+            clearTimeout(autoSaveTimeout);
+            autoSaveTimeout = setTimeout(() => {
+                autoSaveNote(transcript.trim());
+            }, 1000); // Wait 1 second after speech stops before auto-saving
+        }
     };
 
     recognition.onerror = function(event) {
@@ -158,6 +168,7 @@ function resetRecordingState() {
     stopBtn.disabled = true;
     stopTimer();
     resetTimer();
+    clearTimeout(autoSaveTimeout);
     
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
@@ -283,6 +294,57 @@ function updateAchievementsDisplay(allAchievements, unlockedIds) {
     }
 }
 
+// Auto-save function (called while recording)
+function autoSaveNote(noteText) {
+    if (!noteText.trim()) return;
+    
+    const recordingTime = Math.floor((Date.now() - recordingStartTime) / 1000);
+    
+    const noteData = {
+        note: noteText,
+        note_id: currentNoteId,
+        recording_time: recordingTime,
+        is_final: false
+    };
+    
+    fetch("/auto_save_note", {
+        method: "POST",
+        headers: { 
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        },
+        body: JSON.stringify(noteData),
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === "success") {
+            // Store the note ID for future updates
+            if (!currentNoteId) {
+                currentNoteId = data.note_id;
+                showNoteStatus("Auto-saved draft");
+                showDiscardButton(true);
+            }
+            updateStatsDisplay(data.stats);
+        }
+    })
+    .catch(error => console.error("Auto-save error:", error));
+}
+
+function showNoteStatus(message) {
+    const statusEl = document.getElementById("note-status");
+    if (statusEl) {
+        statusEl.textContent = message;
+        statusEl.className = "note-status show";
+    }
+}
+
+function showDiscardButton(show) {
+    const discardBtn = document.getElementById("discard");
+    if (discardBtn) {
+        discardBtn.style.display = show ? "flex" : "none";
+    }
+}
+
 function saveNote() {
     const note = noteInput.value.trim();
     
@@ -298,13 +360,15 @@ function saveNote() {
 
     isSaving = true;
     saveBtn.disabled = true;
-    updateStatus("💾 Saving note...", "saving");
+    updateStatus("💾 Finalizing note...", "saving");
 
     const recordingTime = Math.floor((Date.now() - recordingStartTime) / 1000);
 
     const noteData = {
         note: note,
-        recording_time: recordingTime
+        note_id: currentNoteId,
+        recording_time: recordingTime,
+        is_final: true
     };
 
     if (recordedAudioBlob) {
@@ -320,7 +384,9 @@ function saveNote() {
 }
 
 function sendNoteToServer(noteData) {
-    fetch("/save_note", {
+    const endpoint = noteData.is_final ? "/save_note" : "/auto_save_note";
+    
+    fetch(endpoint, {
         method: "POST",
         headers: { 
             "Content-Type": "application/json",
@@ -336,43 +402,75 @@ function sendNoteToServer(noteData) {
     })
     .then(data => {
         if (data.status === "success") {
-            updateStatus(`✅ Note saved! +${data.points_earned} points`, "success");
-            
-            // Update stats
-            updateStatsDisplay(data.stats);
-            
-            // Show achievement notifications
-            if (data.unlocked_achievements && data.unlocked_achievements.length > 0) {
-                data.unlocked_achievements.forEach(ach => {
-                    setTimeout(() => showAchievementNotification(ach), 500);
-                });
+            if (noteData.is_final) {
+                updateStatus(`✅ Note saved! +${data.points_earned} points`, "success");
+                
+                // Update stats
+                updateStatsDisplay(data.stats);
+                
+                // Show achievement notifications
+                if (data.unlocked_achievements && data.unlocked_achievements.length > 0) {
+                    data.unlocked_achievements.forEach(ach => {
+                        setTimeout(() => showAchievementNotification(ach), 500);
+                    });
+                }
+                
+                // Clear the note and state
+                noteInput.value = "";
+                currentNoteId = null;
+                recordedAudioBlob = null;
+                resetTimer();
+                showNoteStatus("");
+                showDiscardButton(false);
+                
+                // Reload to show updated notes list
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
+            } else {
+                // Auto-save successful
+                if (!currentNoteId) {
+                    currentNoteId = data.note_id;
+                    showNoteStatus("Auto-saved draft");
+                    showDiscardButton(true);
+                }
+                updateStatsDisplay(data.stats);
             }
-            
-            // Clear the note
-            noteInput.value = "";
-            recordedAudioBlob = null;
-            resetTimer();
-            
-            // Reload to show updated notes list
-            setTimeout(() => {
-                location.reload();
-            }, 1500);
         } else {
             throw new Error(data.message || "Save failed");
         }
     })
     .catch(error => {
         console.error("Save error:", error);
-        updateStatus("❌ Failed to save note. Please try again.", "error");
-        
-        setTimeout(() => {
-            updateStatus("Ready to record your voice note");
-        }, 3000);
+        if (noteData.is_final) {
+            updateStatus("❌ Failed to save note. Please try again.", "error");
+            
+            setTimeout(() => {
+                updateStatus("Ready to record your voice note");
+            }, 3000);
+        }
     })
     .finally(() => {
-        isSaving = false;
-        saveBtn.disabled = false;
+        if (noteData.is_final) {
+            isSaving = false;
+            saveBtn.disabled = false;
+        }
     });
+}
+
+function discardNote() {
+    if (confirm("Are you sure you want to discard this draft?")) {
+        noteInput.value = "";
+        currentNoteId = null;
+        recordedAudioBlob = null;
+        resetTimer();
+        showNoteStatus("");
+        showDiscardButton(false);
+        updateStatus("Draft discarded", "success");
+        setTimeout(() => {
+            updateStatus("Ready to record your voice note");
+        }, 2000);
+    }
 }
 
 // Event listeners
@@ -381,6 +479,11 @@ if (stopBtn) {
     stopBtn.addEventListener("click", stopRecording);
 }
 saveBtn.addEventListener("click", saveNote);
+
+const discardBtn = document.getElementById("discard");
+if (discardBtn) {
+    discardBtn.addEventListener("click", discardNote);
+}
 
 // Keyboard shortcuts
 document.addEventListener("keydown", function(event) {

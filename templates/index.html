@@ -57,6 +57,8 @@
                 </div>
 
                 <div class="recording-controls">
+                    <div class="note-status" id="note-status"></div>
+                    
                     <textarea id="note" class="note-input" placeholder="Your transcribed note will appear here..."></textarea>
                     
                     <div class="timer-display" id="timer-display">00:00</div>
@@ -72,7 +74,11 @@
                         </button>
                         <button id="save" class="btn btn-success">
                             <span class="btn-icon">💾</span>
-                            <span class="btn-text">Save Note</span>
+                            <span class="btn-text">Save Final</span>
+                        </button>
+                        <button id="discard" class="btn btn-danger" style="display: none;">
+                            <span class="btn-icon">🗑️</span>
+                            <span class="btn-text">Discard</span>
                         </button>
                     </div>
                 </div>
