@@ -1,10 +1,4 @@
 {
   "buildCommand": "pip install -r requirements.txt",
-  "framework": "flask",
-  "functions": {
-    "api/handler.py": {
-      "memory": 3008,
-      "maxDuration": 10
-    }
-  }
+  "framework": "flask"
 }
