@@ -1,19 +1,27 @@
 const noteInput = document.getElementById("note");
 const startBtn = document.getElementById("start");
+const pauseBtn = document.getElementById("pause");
+const resumeBtn = document.getElementById("resume");
 const stopBtn = document.getElementById("stop");
 const saveBtn = document.getElementById("save");
 const status = document.getElementById("status");
 
 let recognition;
 let isRecording = false;
+let isPaused = false;
 let isSaving = false;
 let mediaRecorder;
 let audioChunks = [];
 let recordedAudioBlob = null;
 let recordingStartTime = 0;
+let pausedTime = 0;
 let recordingTimer = null;
 let currentNoteId = null;
 let autoSaveTimeout = null;
+let audioContext = null;
+let analyser = null;
+let animationId = null;
+let mediaStream = null;
 
 // Achievement configuration
 const ACHIEVEMENTS = {
@@ -130,11 +138,21 @@ function initSpeechRecognition() {
     return true;
 }
 
-// Initialize audio recording
+// Initialize audio recording with waveform visualization
 async function initAudioRecording() {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(mediaStream);
+        
+        // Setup audio context for waveform visualization
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        const source = audioContext.createMediaStreamSource(mediaStream);
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
         
         mediaRecorder.ondataavailable = function(event) {
             if (event.data.size > 0) {
@@ -145,6 +163,11 @@ async function initAudioRecording() {
         mediaRecorder.onstop = function() {
             recordedAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
             audioChunks = [];
+            
+            // Stop waveform animation
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
         };
         
         return true;
@@ -152,6 +175,64 @@ async function initAudioRecording() {
         console.error("Error accessing microphone:", error);
         updateStatus("❌ Could not access microphone", "error");
         return false;
+    }
+}
+
+// Draw waveform visualization
+function drawWaveform() {
+    const canvas = document.getElementById("waveform-canvas");
+    if (!canvas || !analyser) return;
+    
+    const canvasCtx = canvas.getContext("2d");
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    
+    analyser.getByteFrequencyData(dataArray);
+    
+    canvasCtx.fillStyle = "rgba(255, 255, 255, 0.1)";
+    canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    canvasCtx.lineWidth = 2;
+    canvasCtx.strokeStyle = "#6366f1";
+    canvasCtx.beginPath();
+    
+    const sliceWidth = canvas.width / bufferLength;
+    let x = 0;
+    
+    for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = (v * canvas.height) / 2;
+        
+        if (i === 0) {
+            canvasCtx.moveTo(x, canvas.height - y);
+        } else {
+            canvasCtx.lineTo(x, canvas.height - y);
+        }
+        
+        x += sliceWidth;
+    }
+    
+    canvasCtx.lineTo(canvas.width, canvas.height / 2);
+    canvasCtx.stroke();
+    
+    if (isRecording && !isPaused) {
+        animationId = requestAnimationFrame(drawWaveform);
+    }
+}
+
+// Show playback section
+function showPlaybackSection() {
+    const playbackSection = document.getElementById("playback-section");
+    const playbackAudio = document.getElementById("playback-audio");
+    const shareSection = document.getElementById("share-section");
+    
+    if (recordedAudioBlob && playbackSection && playbackAudio) {
+        const audioUrl = URL.createObjectURL(recordedAudioBlob);
+        playbackAudio.src = audioUrl;
+        playbackSection.style.display = "block";
+        if (shareSection) {
+            shareSection.style.display = "block";
+        }
     }
 }
 
@@ -183,8 +264,23 @@ async function startRecording() {
                 if (!audioInitialized) return;
             }
             
+            isPaused = false;
             audioChunks = [];
             mediaRecorder.start();
+            
+            // Show waveform and start visualization
+            const waveformContainer = document.getElementById("waveform-container");
+            if (waveformContainer) {
+                waveformContainer.style.display = "block";
+            }
+            drawWaveform();
+            
+            // Update button states
+            startBtn.disabled = true;
+            pauseBtn.disabled = false;
+            pauseBtn.style.display = "flex";
+            resumeBtn.style.display = "none";
+            stopBtn.disabled = false;
             
             if (recognition) {
                 recognition.start();
@@ -193,6 +289,50 @@ async function startRecording() {
             updateStatus("❌ Could not start recording", "error");
             console.error("Error starting recording:", error);
         }
+    }
+}
+
+function pauseRecording() {
+    if (isRecording && !isPaused) {
+        isPaused = true;
+        pausedTime = Date.now();
+        
+        if (recognition) {
+            recognition.stop();
+        }
+        
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.pause();
+        }
+        
+        stopTimer();
+        updateStatus("⏸️ Recording paused", "success");
+        startBtn.disabled = true;
+        pauseBtn.disabled = true;
+        resumeBtn.disabled = false;
+        stopBtn.disabled = false;
+    }
+}
+
+function resumeRecording() {
+    if (isRecording && isPaused) {
+        isPaused = false;
+        recordingStartTime += (Date.now() - pausedTime);
+        
+        if (mediaRecorder && mediaRecorder.state === 'paused') {
+            mediaRecorder.resume();
+        }
+        
+        if (recognition) {
+            recognition.start();
+        }
+        
+        startTimer();
+        updateStatus("🎤 Recording resumed", "recording");
+        startBtn.disabled = true;
+        pauseBtn.disabled = false;
+        resumeBtn.disabled = true;
+        stopBtn.disabled = false;
     }
 }
 
@@ -208,6 +348,7 @@ function stopRecording() {
         
         stopTimer();
         updateStatus("🛑 Stopping recording...");
+        showPlaybackSection();
     }
 }
 
@@ -466,6 +607,7 @@ function discardNote() {
         resetTimer();
         showNoteStatus("");
         showDiscardButton(false);
+        hidePlaybackAndShare();
         updateStatus("Draft discarded", "success");
         setTimeout(() => {
             updateStatus("Ready to record your voice note");
@@ -473,8 +615,71 @@ function discardNote() {
     }
 }
 
+function hidePlaybackAndShare() {
+    const playbackSection = document.getElementById("playback-section");
+    const shareSection = document.getElementById("share-section");
+    const waveformContainer = document.getElementById("waveform-container");
+    
+    if (playbackSection) playbackSection.style.display = "none";
+    if (shareSection) shareSection.style.display = "none";
+    if (waveformContainer) waveformContainer.style.display = "none";
+}
+
+// Get auto-generated name with date/time
+function generateNoteName() {
+    const now = new Date();
+    const date = now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const time = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    return `Recording - ${date} ${time}`;
+}
+
+// Share handlers
+function shareViaWhatsApp() {
+    if (!recordedAudioBlob) return;
+    
+    const text = `Check out my voice recording: "${noteInput.value.substring(0, 100)}..."`;
+    const encodedText = encodeURIComponent(text);
+    
+    // On mobile, open WhatsApp; on desktop, show instructions
+    if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+        window.open(`https://wa.me/?text=${encodedText}`, "_blank");
+    } else {
+        alert("To share via WhatsApp:\n1. Download the recording\n2. Open WhatsApp and send it directly");
+        downloadRecording();
+    }
+}
+
+function shareViaEmail() {
+    if (!recordedAudioBlob) return;
+    
+    const subject = "Voice Recording";
+    const body = `Check out my voice recording: ${noteInput.value.substring(0, 100)}...`;
+    const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    
+    window.location.href = mailtoLink;
+}
+
+function downloadRecording() {
+    if (!recordedAudioBlob) return;
+    
+    const url = URL.createObjectURL(recordedAudioBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = generateNoteName().replace(/\s+/g, "_") + ".webm";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
 // Event listeners
 startBtn.addEventListener("click", startRecording);
+if (pauseBtn) {
+    pauseBtn.addEventListener("click", pauseRecording);
+}
+if (resumeBtn) {
+    resumeBtn.addEventListener("click", resumeRecording);
+}
 if (stopBtn) {
     stopBtn.addEventListener("click", stopRecording);
 }
@@ -483,6 +688,21 @@ saveBtn.addEventListener("click", saveNote);
 const discardBtn = document.getElementById("discard");
 if (discardBtn) {
     discardBtn.addEventListener("click", discardNote);
+}
+
+// Share button listeners
+const shareWhatsAppBtn = document.getElementById("share-whatsapp");
+const shareEmailBtn = document.getElementById("share-email");
+const shareDownloadBtn = document.getElementById("share-download");
+
+if (shareWhatsAppBtn) {
+    shareWhatsAppBtn.addEventListener("click", shareViaWhatsApp);
+}
+if (shareEmailBtn) {
+    shareEmailBtn.addEventListener("click", shareViaEmail);
+}
+if (shareDownloadBtn) {
+    shareDownloadBtn.addEventListener("click", downloadRecording);
 }
 
 // Keyboard shortcuts

@@ -59,14 +59,35 @@
                 <div class="recording-controls">
                     <div class="note-status" id="note-status"></div>
                     
+                    <!-- Waveform Visualization -->
+                    <div class="waveform-container" id="waveform-container" style="display: none;">
+                        <canvas id="waveform-canvas" class="waveform-canvas"></canvas>
+                    </div>
+                    
                     <textarea id="note" class="note-input" placeholder="Your transcribed note will appear here..."></textarea>
                     
                     <div class="timer-display" id="timer-display">00:00</div>
+                    
+                    <!-- Instant Playback -->
+                    <div class="playback-section" id="playback-section" style="display: none;">
+                        <div class="playback-header">
+                            <h4>Playback</h4>
+                        </div>
+                        <audio id="playback-audio" controls class="playback-audio"></audio>
+                    </div>
                     
                     <div class="controls">
                         <button id="start" class="btn btn-primary">
                             <span class="btn-icon">🎤</span>
                             <span class="btn-text">Start Recording</span>
+                        </button>
+                        <button id="pause" class="btn btn-warning" disabled style="display: none;">
+                            <span class="btn-icon">⏸️</span>
+                            <span class="btn-text">Pause</span>
+                        </button>
+                        <button id="resume" class="btn btn-warning" disabled style="display: none;">
+                            <span class="btn-icon">▶️</span>
+                            <span class="btn-text">Resume</span>
                         </button>
                         <button id="stop" class="btn btn-danger" disabled>
                             <span class="btn-icon">⏹️</span>
@@ -80,6 +101,24 @@
                             <span class="btn-icon">🗑️</span>
                             <span class="btn-text">Discard</span>
                         </button>
+                    </div>
+
+                    <!-- Share Section -->
+                    <div class="share-section" id="share-section" style="display: none;">
+                        <div class="section-header">
+                            <h4>Share Recording</h4>
+                        </div>
+                        <div class="share-buttons">
+                            <button id="share-whatsapp" class="share-btn whatsapp">
+                                <span class="share-icon">💬</span> WhatsApp
+                            </button>
+                            <button id="share-email" class="share-btn email">
+                                <span class="share-icon">📧</span> Email
+                            </button>
+                            <button id="share-download" class="share-btn download">
+                                <span class="share-icon">⬇️</span> Download
+                            </button>
+                        </div>
                     </div>
                 </div>
 
