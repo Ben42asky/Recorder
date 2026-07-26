@@ -3,47 +3,151 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Speech Notes</title>
+    <title>VoiceHub - Professional Voice Notes</title>
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
-    <div class="container">
-        <h1>🎙️ Speech Notes</h1>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <h1 class="app-title">🎙️ VoiceHub</h1>
+                <p class="app-subtitle">Professional Voice Notes & Achievements</p>
+            </div>
+            <div class="profile-badge">
+                <div class="level-badge" id="level-badge">Level 1</div>
+                <div class="points-display" id="points-display">0 pts</div>
+            </div>
+        </header>
 
-        <div class="status" id="status">
-            Ready to record your voice note
+        <!-- Stats Dashboard -->
+        <div class="stats-dashboard">
+            <div class="stat-card">
+                <div class="stat-icon">📝</div>
+                <div class="stat-value" id="total-notes">0</div>
+                <div class="stat-label">Notes</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📚</div>
+                <div class="stat-value" id="total-words">0</div>
+                <div class="stat-label">Words</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🔥</div>
+                <div class="stat-value" id="daily-streak">0</div>
+                <div class="stat-label">Day Streak</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⏱️</div>
+                <div class="stat-value" id="total-time">0s</div>
+                <div class="stat-label">Recording Time</div>
+            </div>
         </div>
 
-        <textarea id="note" placeholder="Your note here..."></textarea>
-        <br/>
-        
-        <div class="controls">
-            <button id="start">🎤 Start Recording</button>
-            <button id="stop" disabled>🛑 Stop Recording</button>
-            <button id="save">💾 Save Note</button>
-        </div>
+        <!-- Main Content -->
+        <div class="main-container">
+            <!-- Recording Section -->
+            <div class="recording-section">
+                <div class="section-header">
+                    <h2>Record Your Note</h2>
+                </div>
+                
+                <div class="status-bar" id="status">
+                    Ready to record your voice note
+                </div>
 
-        <h2>Saved Notes</h2>
-        <ul id="notes-list">
-           {% for note in notes %}
-                <li class="note-item">
-                    <div class="note-content">
-                        <div class="note-text">{{ note.text if note.text else note }}</div>
-                        <div class="note-timestamp">
-                            {% if note.timestamp %}{{ note.timestamp }}{% endif %}
+                <div class="recording-controls">
+                    <textarea id="note" class="note-input" placeholder="Your transcribed note will appear here..."></textarea>
+                    
+                    <div class="timer-display" id="timer-display">00:00</div>
+                    
+                    <div class="controls">
+                        <button id="start" class="btn btn-primary">
+                            <span class="btn-icon">🎤</span>
+                            <span class="btn-text">Start Recording</span>
+                        </button>
+                        <button id="stop" class="btn btn-danger" disabled>
+                            <span class="btn-icon">⏹️</span>
+                            <span class="btn-text">Stop</span>
+                        </button>
+                        <button id="save" class="btn btn-success">
+                            <span class="btn-icon">💾</span>
+                            <span class="btn-text">Save Note</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Achievement Popup -->
+                <div class="achievement-popup" id="achievement-popup">
+                    <div class="achievement-content">
+                        <div class="achievement-icon">🏆</div>
+                        <div class="achievement-text">
+                            <div class="achievement-name" id="achievement-name"></div>
+                            <div class="achievement-points" id="achievement-points"></div>
                         </div>
                     </div>
-                    {% if note.audio %}
-                    <div class="note-audio">
-                        <audio controls>
-                            <source src="{{ note.audio }}" type="audio/webm">
-                            Your browser does not support the audio element.
-                        </audio>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <!-- Achievements Section -->
+                <div class="achievements-section">
+                    <div class="section-header">
+                        <h3>🏆 Achievements</h3>
+                        <span class="achievement-count" id="achievement-count">0/6</span>
                     </div>
-                    {% endif %}
-                </li>
-            {% endfor %}
-        </ul>
+                    <div class="achievements-list" id="achievements-list"></div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="progress-section">
+                    <div class="section-header">
+                        <h3>Level Progress</h3>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
+                        <div class="progress-text" id="progress-text">0 / 100 pts</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notes History -->
+        <div class="notes-history">
+            <div class="section-header">
+                <h2>📖 Your Notes</h2>
+            </div>
+            <ul class="notes-list" id="notes-list">
+                {% for note in notes %}
+                    <li class="note-item">
+                        <div class="note-header">
+                            <div class="note-date">{{ note.timestamp }}</div>
+                            <div class="note-meta">
+                                <span class="note-words">{{ note.word_count or note.text.split()|length }} words</span>
+                            </div>
+                        </div>
+                        <div class="note-content">
+                            <p class="note-text">{{ note.text if note.text else note }}</p>
+                        </div>
+                        {% if note.audio %}
+                        <div class="note-audio">
+                            <audio controls>
+                                <source src="{{ note.audio }}" type="audio/webm">
+                                Your browser does not support the audio element.
+                            </audio>
+                        </div>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+            <div id="empty-state" class="empty-state" {% if notes %}style="display: none;"{% endif %}>
+                <div class="empty-icon">📝</div>
+                <p>No notes yet. Start recording to see your notes here!</p>
+            </div>
+        </div>
     </div>
 
     <script src="/static/js/script.js"></script>

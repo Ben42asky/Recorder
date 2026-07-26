@@ -10,10 +10,52 @@ let isSaving = false;
 let mediaRecorder;
 let audioChunks = [];
 let recordedAudioBlob = null;
+let recordingStartTime = 0;
+let recordingTimer = null;
+
+// Achievement configuration
+const ACHIEVEMENTS = {
+    "first_note": { icon: "🎬", name: "Getting Started", desc: "Record your first note", color: "#3b82f6" },
+    "note_collector": { icon: "📚", name: "Note Collector", desc: "Save 10 notes", color: "#8b5cf6" },
+    "word_master": { icon: "📖", name: "Word Master", desc: "Record 1000 words", color: "#ec4899" },
+    "streak_3": { icon: "🔥", name: "On Fire", desc: "3-day recording streak", color: "#f59e0b" },
+    "verbose": { icon: "📝", name: "Verbose", desc: "500+ character note", color: "#06b6d4" },
+    "productive": { icon: "⚡", name: "Productive Day", desc: "5 notes in one day", color: "#10b981" },
+};
+
+// Timer functions
+function startTimer() {
+    recordingStartTime = Date.now();
+    recordingTimer = setInterval(updateTimer, 100);
+}
+
+function stopTimer() {
+    if (recordingTimer) {
+        clearInterval(recordingTimer);
+        recordingTimer = null;
+    }
+}
+
+function updateTimer() {
+    const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+    const minutes = Math.floor(elapsed / 60);
+    const seconds = elapsed % 60;
+    const timerDisplay = document.getElementById("timer-display");
+    if (timerDisplay) {
+        timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+}
+
+function resetTimer() {
+    stopTimer();
+    const timerDisplay = document.getElementById("timer-display");
+    if (timerDisplay) {
+        timerDisplay.textContent = "00:00";
+    }
+}
 
 // Initialize speech recognition and audio recording
 function initSpeechRecognition() {
-    // Check for both standard and webkit versions
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     
     if (!SpeechRecognition) {
@@ -23,12 +65,13 @@ function initSpeechRecognition() {
     }
 
     recognition = new SpeechRecognition();
-    recognition.continuous = true;  // Allow continuous recording
-    recognition.interimResults = true;  // Show interim results
+    recognition.continuous = true;
+    recognition.interimResults = true;
     recognition.lang = 'en-US';
 
     recognition.onstart = function() {
         isRecording = true;
+        startTimer();
         updateStatus("🎤 Listening... Speak now!", "recording");
         startBtn.disabled = true;
         stopBtn.disabled = false;
@@ -105,7 +148,7 @@ async function initAudioRecording() {
 function updateStatus(message, type = "") {
     if (status) {
         status.textContent = message;
-        status.className = `status ${type}`;
+        status.className = `status-bar ${type}`;
     }
 }
 
@@ -113,8 +156,9 @@ function resetRecordingState() {
     isRecording = false;
     startBtn.disabled = false;
     stopBtn.disabled = true;
+    stopTimer();
+    resetTimer();
     
-    // Stop media recorder if active
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
     }
@@ -123,17 +167,14 @@ function resetRecordingState() {
 async function startRecording() {
     if (!isRecording) {
         try {
-            // Initialize audio recording if not already done
             if (!mediaRecorder) {
                 const audioInitialized = await initAudioRecording();
                 if (!audioInitialized) return;
             }
             
-            // Start audio recording
             audioChunks = [];
             mediaRecorder.start();
             
-            // Start speech recognition
             if (recognition) {
                 recognition.start();
             }
@@ -146,17 +187,99 @@ async function startRecording() {
 
 function stopRecording() {
     if (isRecording) {
-        // Stop speech recognition
         if (recognition) {
             recognition.stop();
         }
         
-        // Stop audio recording
         if (mediaRecorder && mediaRecorder.state !== 'inactive') {
             mediaRecorder.stop();
         }
         
+        stopTimer();
         updateStatus("🛑 Stopping recording...");
+    }
+}
+
+// Update stats display
+function updateStatsDisplay(stats) {
+    const totalNotesEl = document.getElementById("total-notes");
+    const totalWordsEl = document.getElementById("total-words");
+    const dailyStreakEl = document.getElementById("daily-streak");
+    const totalTimeEl = document.getElementById("total-time");
+    const levelBadgeEl = document.getElementById("level-badge");
+    const pointsDisplayEl = document.getElementById("points-display");
+    const progressBarEl = document.getElementById("progress-fill");
+    const progressTextEl = document.getElementById("progress-text");
+
+    if (totalNotesEl) totalNotesEl.textContent = stats.total_notes;
+    if (totalWordsEl) totalWordsEl.textContent = stats.total_words;
+    if (dailyStreakEl) dailyStreakEl.textContent = stats.daily_streak;
+    if (totalTimeEl) totalTimeEl.textContent = formatTime(stats.total_recording_time);
+    if (levelBadgeEl) levelBadgeEl.textContent = `Level ${stats.level}`;
+    if (pointsDisplayEl) pointsDisplayEl.textContent = `${stats.points} pts`;
+
+    // Update progress bar
+    const levelPoints = (stats.level - 1) * 100;
+    const nextLevelPoints = stats.level * 100;
+    const progress = ((stats.points - levelPoints) / 100) * 100;
+    if (progressBarEl) progressBarEl.style.width = Math.min(progress, 100) + "%";
+    if (progressTextEl) progressTextEl.textContent = `${stats.points % 100} / 100 pts`;
+}
+
+function formatTime(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m`;
+    return `${seconds}s`;
+}
+
+// Achievement notification
+function showAchievementNotification(achievement) {
+    const popup = document.getElementById("achievement-popup");
+    const nameEl = document.getElementById("achievement-name");
+    const pointsEl = document.getElementById("achievement-points");
+
+    if (popup && nameEl && pointsEl) {
+        nameEl.textContent = achievement.name;
+        pointsEl.textContent = `+${achievement.points} points`;
+        
+        popup.classList.add("show");
+        
+        setTimeout(() => {
+            popup.classList.remove("show");
+        }, 3000);
+    }
+}
+
+// Update achievements display
+function updateAchievementsDisplay(allAchievements, unlockedIds) {
+    const achievementsList = document.getElementById("achievements-list");
+    const achievementCount = document.getElementById("achievement-count");
+
+    if (!achievementsList) return;
+
+    achievementsList.innerHTML = "";
+    
+    Object.entries(ACHIEVEMENTS).forEach(([id, ach]) => {
+        const isUnlocked = unlockedIds.includes(id);
+        const badge = document.createElement("div");
+        badge.className = `achievement-badge ${isUnlocked ? "unlocked" : "locked"}`;
+        
+        badge.innerHTML = `
+            <div class="achievement-icon-small">${ach.icon}</div>
+            <div class="achievement-info">
+                <span class="achievement-title">${ach.name}</span>
+                <span class="achievement-desc">${ach.desc}</span>
+            </div>
+            ${isUnlocked ? '<div class="achievement-status">✓ Unlocked</div>' : ''}
+        `;
+        
+        achievementsList.appendChild(badge);
+    });
+
+    if (achievementCount) {
+        achievementCount.textContent = `${unlockedIds.length}/${Object.keys(ACHIEVEMENTS).length}`;
     }
 }
 
@@ -177,12 +300,13 @@ function saveNote() {
     saveBtn.disabled = true;
     updateStatus("💾 Saving note...", "saving");
 
-    // Prepare the data to send
+    const recordingTime = Math.floor((Date.now() - recordingStartTime) / 1000);
+
     const noteData = {
-        note: note
+        note: note,
+        recording_time: recordingTime
     };
 
-    // Convert audio blob to base64 if available
     if (recordedAudioBlob) {
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -212,15 +336,27 @@ function sendNoteToServer(noteData) {
     })
     .then(data => {
         if (data.status === "success") {
-            updateStatus("✅ Note saved successfully!", "success");
-            // Clear the note and audio after successful save
+            updateStatus(`✅ Note saved! +${data.points_earned} points`, "success");
+            
+            // Update stats
+            updateStatsDisplay(data.stats);
+            
+            // Show achievement notifications
+            if (data.unlocked_achievements && data.unlocked_achievements.length > 0) {
+                data.unlocked_achievements.forEach(ach => {
+                    setTimeout(() => showAchievementNotification(ach), 500);
+                });
+            }
+            
+            // Clear the note
             noteInput.value = "";
             recordedAudioBlob = null;
+            resetTimer();
             
             // Reload to show updated notes list
             setTimeout(() => {
                 location.reload();
-            }, 1000);
+            }, 1500);
         } else {
             throw new Error(data.message || "Save failed");
         }
@@ -267,6 +403,16 @@ document.addEventListener("keydown", function(event) {
 
 // Initialize the app
 window.addEventListener('load', function() {
+    // Load initial stats
+    fetch("/stats")
+        .then(res => res.json())
+        .then(stats => updateStatsDisplay(stats));
+    
+    // Load achievements
+    fetch("/achievements")
+        .then(res => res.json())
+        .then(data => updateAchievementsDisplay(data.all, data.unlocked));
+    
     if (!initSpeechRecognition()) {
         updateStatus("❌ Speech recognition not available", "error");
     }
